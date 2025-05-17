@@ -5,7 +5,6 @@ import { samehadakuInfo } from "@samehadaku/index";
 import generatePayload from "@helpers/payload";
 import path from "path";
 import fs from "fs";
-import axios from "axios";
 
 const mainController = {
   getMainView(req: Request, res: Response, next: NextFunction): void {
@@ -57,90 +56,6 @@ const mainController = {
       res.json(generatePayload(res, { data }));
     } catch (error) {
       next(error);
-    }
-  },
-
-  async proxy(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { url, method = "GET", data, headers = {} } = req.body;
-
-      if (!url) {
-        throw new Error("URL is required");
-      }
-
-      console.log("Proxy request:", {
-        url,
-        method,
-        headers,
-        data: data ? "Data present" : "No data",
-      });
-
-      // Validasi URL
-      try {
-        new URL(url);
-      } catch (error) {
-        throw new Error("Invalid URL format");
-      }
-
-      const response = await axios({
-        url,
-        method,
-        data,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/json, text/javascript, */*; q=0.01",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-Requested-With": "XMLHttpRequest",
-          Origin: new URL(url).origin,
-          Referer: url,
-          ...headers,
-        },
-        timeout: 10000,
-        validateStatus: (status) => status < 500, // Terima semua response kecuali 5xx
-        maxRedirects: 5,
-        maxContentLength: 50 * 1024 * 1024, // 50MB
-      });
-
-      console.log("Proxy response:", {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        contentType: response.headers["content-type"],
-      });
-
-      // Kirim response sesuai dengan content type
-      if (response.headers["content-type"]?.includes("application/json")) {
-        res.json(response.data);
-      } else {
-        res.send(response.data);
-      }
-    } catch (error: any) {
-      console.error("Proxy error:", {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers,
-      });
-
-      // Jika error dari target server
-      if (error.response) {
-        res.status(error.response.status).json({
-          statusCode: error.response.status,
-          statusMessage: error.response.statusText,
-          message: error.message,
-          data: error.response.data,
-        });
-      } else {
-        // Jika error sebelum mendapat response
-        res.status(500).json({
-          statusCode: 500,
-          statusMessage: "Internal Server Error",
-          message: error.message,
-        });
-      }
     }
   },
 

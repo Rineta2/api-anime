@@ -424,273 +424,189 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
           recommendedEpisodeList: [],
           movie: { href: "", samehadakuUrl: "", animeList: [] },
         },
-        axiosConfig: {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-          },
-          timeout: 10000,
-          validateStatus: (status) => status < 500,
-        },
       },
       async ($, data) => {
-        try {
-          const getDefaultStreaming = async () => {
-            try {
-              const el = $($(".east_player_option")[0]);
-              if (!el.length) {
-                console.log("No player option found");
-                return "";
-              }
+        const getDefaultStreaming = async () => {
+          const el = $($(".east_player_option")[0]);
 
-              const postData = el.attr("data-post");
-              const numeData = el.attr("data-nume");
-              const typeData = el.attr("data-type");
+          const postData = el.attr("data-post");
+          const numeData = el.attr("data-nume");
+          const typeData = el.attr("data-type");
 
-              if (!postData || !numeData || !typeData) {
-                console.log("Missing player data:", { postData, numeData, typeData });
-                return "";
-              }
-
-              console.log("Fetching streaming data:", {
-                post: postData,
-                nume: numeData,
-                type: typeData,
-              });
-
-              const proxyUrl = `${originUrl}/api/proxy`;
-              const result = await wajikFetch(proxyUrl, originUrl, {
-                method: "POST",
-                responseType: "text",
-                headers: {
-                  "Content-Type": "application/json",
-                  "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                  Accept: "application/json, text/javascript, */*; q=0.01",
-                  "Accept-Language": "en-US,en;q=0.9",
-                  Origin: originUrl,
-                  Referer: originUrl,
-                },
-                data: JSON.stringify({
-                  url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
-                  method: "POST",
-                  headers: {
-                    "User-Agent":
-                      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    Accept: "application/json, text/javascript, */*; q=0.01",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                    "X-Requested-With": "XMLHttpRequest",
-                    Origin: this.baseUrl,
-                    Referer: this.baseUrl,
-                  },
-                  data: new URLSearchParams({
-                    action: "player_ajax",
-                    post: postData,
-                    nume: numeData,
-                    type: typeData,
-                  }).toString(),
-                }),
-                timeout: 10000,
-              });
-
-              if (!result || !result.data) {
-                console.log("No streaming data received");
-                return "";
-              }
-
-              const streamingUrl = this.generateSrcFromIframeTag(result.data);
-              console.log("Generated streaming URL:", streamingUrl);
-              return streamingUrl;
-            } catch (error) {
-              console.error("Error getting default streaming:", error);
-              return "";
-            }
-          };
-
-          data.title = $("h1.entry-title").text();
-          const breadcrumbLinks = $("#breadcrumbs li a").toArray();
-          const animeLink = breadcrumbLinks.find((link) => $(link).text().includes("Season"));
-          data.animeId = animeLink ? this.generateSlug($(animeLink).attr("href")) : "";
-
-          data.poster = this.str($(".thumb img").attr("src"));
-          data.releasedOn = $(".time-post").text().trim();
-          data.defaultStreamingUrl = await getDefaultStreaming();
-          data.downloadUrl = this.parseDownloadUrl($);
-
-          console.log("Default streaming URL:", data.defaultStreamingUrl);
-
-          if (data.defaultStreamingUrl.includes("api.wibufile.com")) {
-            data.defaultStreamingUrl =
-              originUrl +
-              path
-                .join("/", this.baseUrlPath, `wibufile?url=${data.defaultStreamingUrl}`)
-                .replace(/\\/g, "/");
-            console.log("Modified wibufile URL:", data.defaultStreamingUrl);
-          }
-
-          const serverElements = $(".server_option ul li .east_player_option").toArray();
-
-          type Q = "unknown" | "360p" | "480p" | "720p" | "1080p" | "4k";
-
-          const serverQualities: { title: Q; serverList: Server[] }[] = [
-            { title: "unknown", serverList: [] },
-            { title: "360p", serverList: [] },
-            { title: "480p", serverList: [] },
-            { title: "720p", serverList: [] },
-            { title: "1080p", serverList: [] },
-            { title: "4k", serverList: [] },
-          ];
-
-          let fixedServerQualities: string[] = [];
-
-          serverQualities.forEach((quality) => {
-            serverElements.forEach((serverElement) => {
-              if (!$(serverElement).attr("style")?.includes("not-allowed")) {
-                const title = $(serverElement).text().trim();
-
-                if (title.toLowerCase().includes(quality.title)) {
-                  fixedServerQualities.push(title);
-                }
-              }
-            });
+          const result = await wajikFetch(`${this.baseUrl}/wp-admin/admin-ajax.php`, this.baseUrl, {
+            method: "POST",
+            responseType: "text",
+            data: new URLSearchParams({
+              action: "player_ajax",
+              post: this.str(postData),
+              nume: this.str(numeData),
+              type: this.str(typeData),
+            }),
           });
 
-          serverQualities.forEach((quality) => {
-            serverElements.forEach((serverElement) => {
-              if (!$(serverElement).attr("style")?.includes("not-allowed")) {
-                const title = $(serverElement).text().trim();
-                const postData = this.str($(serverElement).attr("data-post"));
-                const numeData = this.str($(serverElement).attr("data-nume"));
-                const typeData = this.str($(serverElement).attr("data-type"));
-                const serverId = this.enrawr(`${postData}-${numeData}-${typeData}`);
-                const href = this.generateHref("server", serverId);
+          return this.generateSrcFromIframeTag(result);
+        };
 
-                if (title.toLowerCase().includes(quality.title)) {
-                  quality.serverList.push({ title, serverId, href });
-                } else {
-                  if (!fixedServerQualities.includes(title) && quality.title === "unknown") {
-                    quality.serverList.push({ title, serverId, href });
-                  }
-                }
-              }
-            });
-          });
+        data.title = $("h1.entry-title").text();
+        data.animeId = this.generateSlug($(".naveps .nvs.nvsc a").attr("href"));
+        data.poster = this.str($(".thumb img").attr("src"));
+        data.releasedOn = $(".time-post").text().trim();
+        data.defaultStreamingUrl = await getDefaultStreaming();
+        data.downloadUrl = this.parseDownloadUrl($);
 
-          data.server.qualities = serverQualities;
-
-          const navigationElements = $(".naveps .nvs:not(.nvsc) a").toArray();
-
-          navigationElements.forEach((navigationElement, index) => {
-            const card = this.parseLinkCard($(navigationElement), "episode");
-
-            if (card.slug !== "#") {
-              if (index === 0) {
-                data.prevEpisode = {
-                  title: "Prev",
-                  episodeId: card.slug,
-                  href: card.href,
-                  samehadakuUrl: card.samehadakuUrl,
-                };
-              } else {
-                data.nextEpisode = {
-                  title: "Next",
-                  episodeId: card.slug,
-                  href: card.href,
-                  samehadakuUrl: card.samehadakuUrl,
-                };
-              }
-            }
-          });
-
-          data.hasPrevEpisode = data.prevEpisode ? true : false;
-          data.hasNextEpisode = data.nextEpisode ? true : false;
-          data.movie.href = this.generateHref("movies");
-          data.movie.samehadakuUrl = this.generateSourceUrl(
-            $(".widgets h3 .linkwidget").attr("href")
-          );
-
-          const movieElements = $(".widgetseries ul li").toArray();
-
-          movieElements.forEach((movieElement) => {
-            const card = this.parseAnimeCard3($, $(movieElement));
-
-            data.movie.animeList.push(card);
-          });
-
-          const connectionElements = $(".desc a").toArray();
-
-          connectionElements.forEach((connectionElement) => {
-            const card = this.parseLinkCard($(connectionElement), "anime");
-
-            data.synopsis.connections?.push({
-              title: card.title,
-              animeId: card.slug,
-              href: card.href,
-              samehadakuUrl: card.samehadakuUrl,
-            });
-          });
-
-          $(".desc a").remove();
-
-          const paragraph = $(".desc").text().trim();
-
-          data.synopsis.paragraphs.push(paragraph);
-
-          const genreElements = $(".genre-info a").toArray();
-
-          genreElements.forEach((genreElement) => {
-            const card = this.parseLinkCard($(genreElement), "genres");
-
-            data.genreList.push({
-              title: card.title,
-              genreId: card.slug,
-              href: card.href,
-              samehadakuUrl: card.samehadakuUrl,
-            });
-          });
-
-          const animeElements = $(".lstepsiode ul li").toArray();
-
-          animeElements.forEach((animeElement) => {
-            const title = $(animeElement).find(".epsleft .lchx").text();
-            const poster = this.str($(animeElement).find(".epsright img").attr("src"));
-            const releaseDate = $(animeElement).find(".epsleft .date").text();
-            const oriUrl = $(animeElement).find(".epsright a").attr("href");
-            const samehadakuUrl = this.generateSourceUrl(oriUrl);
-            const animeId = this.generateSlug(oriUrl);
-            const href = this.generateHref("episode", animeId);
-
-            data.recommendedEpisodeList.push({
-              title,
-              poster,
-              releaseDate,
-              episodeId,
-              href,
-              samehadakuUrl,
-            });
-          });
-
-          const isEmpty =
-            !data.title && data.genreList.length === 0 && data.downloadUrl.formats.length === 0;
-
-          this.checkEmptyData(isEmpty);
-
-          return data;
-        } catch (error) {
-          console.error("Error parsing anime episode:", error);
-          throw error;
+        if (data.defaultStreamingUrl.includes("api.wibufile.com")) {
+          data.defaultStreamingUrl =
+            originUrl + this.generateHref("/", `wibufile?url=${data.defaultStreamingUrl}`);
         }
+
+        const serverElements = $(".server_option ul li .east_player_option").toArray();
+
+        type Q = "unknown" | "360p" | "480p" | "720p" | "1080p" | "4k";
+
+        const serverQualities: { title: Q; serverList: Server[] }[] = [
+          { title: "unknown", serverList: [] },
+          { title: "360p", serverList: [] },
+          { title: "480p", serverList: [] },
+          { title: "720p", serverList: [] },
+          { title: "1080p", serverList: [] },
+          { title: "4k", serverList: [] },
+        ];
+
+        let fixedServerQualities: string[] = [];
+
+        serverQualities.forEach((quality) => {
+          serverElements.forEach((serverElement) => {
+            if (!$(serverElement).attr("style")?.includes("not-allowed")) {
+              const title = $(serverElement).text().trim();
+
+              if (title.toLowerCase().includes(quality.title)) {
+                fixedServerQualities.push(title);
+              }
+            }
+          });
+        });
+
+        serverQualities.forEach((quality) => {
+          serverElements.forEach((serverElement) => {
+            if (!$(serverElement).attr("style")?.includes("not-allowed")) {
+              const title = $(serverElement).text().trim();
+              const postData = this.str($(serverElement).attr("data-post"));
+              const numeData = this.str($(serverElement).attr("data-nume"));
+              const typeData = this.str($(serverElement).attr("data-type"));
+              const serverId = this.enrawr(`${postData}-${numeData}-${typeData}`);
+              const href = this.generateHref("server", serverId);
+
+              if (title.toLowerCase().includes(quality.title)) {
+                quality.serverList.push({ title, serverId, href });
+              } else {
+                if (!fixedServerQualities.includes(title) && quality.title === "unknown") {
+                  quality.serverList.push({ title, serverId, href });
+                }
+              }
+            }
+          });
+        });
+
+        data.server.qualities = serverQualities;
+
+        const navigationElements = $(".naveps .nvs:not(.nvsc) a").toArray();
+
+        navigationElements.forEach((navigationElement, index) => {
+          const card = this.parseLinkCard($(navigationElement), "episode");
+
+          if (card.slug !== "#") {
+            if (index === 0) {
+              data.prevEpisode = {
+                title: "Prev",
+                episodeId: card.slug,
+                href: card.href,
+                samehadakuUrl: card.samehadakuUrl,
+              };
+            } else {
+              data.nextEpisode = {
+                title: "Next",
+                episodeId: card.slug,
+                href: card.href,
+                samehadakuUrl: card.samehadakuUrl,
+              };
+            }
+          }
+        });
+
+        data.hasPrevEpisode = data.prevEpisode ? true : false;
+        data.hasNextEpisode = data.nextEpisode ? true : false;
+        data.movie.href = this.generateHref("movies");
+        data.movie.samehadakuUrl = this.generateSourceUrl(
+          $(".widgets h3 .linkwidget").attr("href")
+        );
+
+        const movieElements = $(".widgetseries ul li").toArray();
+
+        movieElements.forEach((movieElement) => {
+          const card = this.parseAnimeCard3($, $(movieElement));
+
+          data.movie.animeList.push(card);
+        });
+
+        const connectionElements = $(".desc a").toArray();
+
+        connectionElements.forEach((connectionElement) => {
+          const card = this.parseLinkCard($(connectionElement), "anime");
+
+          data.synopsis.connections?.push({
+            title: card.title,
+            animeId: card.slug,
+            href: card.href,
+            samehadakuUrl: card.samehadakuUrl,
+          });
+        });
+
+        $(".desc a").remove();
+
+        const paragraph = $(".desc").text().trim();
+
+        data.synopsis.paragraphs.push(paragraph);
+
+        const genreElements = $(".genre-info a").toArray();
+
+        genreElements.forEach((genreElement) => {
+          const card = this.parseLinkCard($(genreElement), "genres");
+
+          data.genreList.push({
+            title: card.title,
+            genreId: card.slug,
+            href: card.href,
+            samehadakuUrl: card.samehadakuUrl,
+          });
+        });
+
+        const animeElements = $(".lstepsiode ul li").toArray();
+
+        animeElements.forEach((animeElement) => {
+          const title = $(animeElement).find(".epsleft .lchx").text();
+          const poster = this.str($(animeElement).find(".epsright img").attr("src"));
+          const releaseDate = $(animeElement).find(".epsleft .date").text();
+          const oriUrl = $(animeElement).find(".epsright a").attr("href");
+          const samehadakuUrl = this.generateSourceUrl(oriUrl);
+          const animeId = this.generateSlug(oriUrl);
+          const href = this.generateHref("episode", animeId);
+
+          data.recommendedEpisodeList.push({
+            title,
+            poster,
+            releaseDate,
+            episodeId,
+            href,
+            samehadakuUrl,
+          });
+        });
+
+        const isEmpty =
+          !data.title && data.genreList.length === 0 && data.downloadUrl.formats.length === 0;
+
+        this.checkEmptyData(isEmpty);
+
+        return data;
       }
     );
   }
@@ -702,91 +618,37 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
     const nume = serverIdArr[1];
     const type = serverIdArr[2];
 
-    try {
-      // Coba request melalui proxy dengan retry mechanism
-      const maxRetries = 3;
-      let retryCount = 0;
-      let lastError;
-
-      while (retryCount < maxRetries) {
-        try {
-          const proxyUrl = `${originUrl}/api/proxy`;
-          console.log(`Attempt ${retryCount + 1} to fetch from proxy:`, proxyUrl);
-
-          const url = await wajikFetch(proxyUrl, originUrl, {
-            method: "POST",
-            responseType: "text",
-            headers: {
-              "Content-Type": "application/json",
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              Accept: "application/json, text/javascript, */*; q=0.01",
-              "Accept-Language": "en-US,en;q=0.9",
-              Origin: originUrl,
-              Referer: originUrl,
-            },
-            data: JSON.stringify({
-              url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
-              method: "POST",
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                Accept: "application/json, text/javascript, */*; q=0.01",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-                Origin: this.baseUrl,
-                Referer: this.baseUrl,
-              },
-              data: new URLSearchParams({
-                action: "player_ajax",
-                post: post || "",
-                nume: nume || "",
-                type: type || "",
-              }).toString(),
-            }),
-            timeout: 10000, // 10 detik timeout
-          });
-
-          if (!url || !url.data) {
-            throw new Error("No data received from server");
-          }
-
-          data.url = this.generateSrcFromIframeTag(url.data);
-
-          if (data.url.includes("api.wibufile.com")) {
-            data.url =
-              originUrl +
-              path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
-          }
-
-          const isEmpty = !data.url || data.url === "No iframe found";
-
-          if (isEmpty) {
-            throw new Error("No valid streaming URL found");
-          }
-
-          return data;
-        } catch (error: any) {
-          lastError = error;
-          console.error(`Attempt ${retryCount + 1} failed:`, error.message);
-          retryCount++;
-
-          if (retryCount < maxRetries) {
-            // Tunggu sebentar sebelum retry
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
-        }
+    const url = await wajikFetch(
+      `${this.baseUrl}/wp-admin/admin-ajax.php`,
+      this.baseUrl,
+      {
+        method: "POST",
+        responseType: "text",
+        data: new URLSearchParams({
+          action: "player_ajax",
+          post: post || "",
+          nume: nume || "",
+          type: type || "",
+        }),
+      },
+      (response) => {
+        if (!response.data) setResponseError(400);
       }
+    );
 
-      // Jika semua retry gagal
-      console.error("All retry attempts failed:", lastError);
-      throw lastError;
-    } catch (error: any) {
-      console.error("Error getting server URL:", error);
-      setResponseError(400);
-      throw error;
+    data.url = this.generateSrcFromIframeTag(url);
+
+    if (data.url.includes("api.wibufile.com")) {
+      data.url =
+        originUrl +
+        path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
     }
+
+    const isEmpty = !data.url || data.url === "No iframe found";
+
+    this.checkEmptyData(isEmpty);
+
+    return data;
   }
 
   parseWibuFile(url: string): Promise<any> {
@@ -881,15 +743,5 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
         return data;
       }
     );
-  }
-
-  generateSourceUrl(oriUrl: string | undefined): string {
-    if (!oriUrl) return "";
-
-    // Pastikan URL menggunakan domain yang benar
-    const url = new URL(oriUrl);
-    url.hostname = "samehadaku.now";
-
-    return url.toString();
   }
 }
