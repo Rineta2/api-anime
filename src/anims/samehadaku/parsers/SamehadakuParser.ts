@@ -882,4 +882,14 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
       }
     );
   }
+
+  generateSourceUrl(oriUrl: string | undefined): string {
+    if (!oriUrl) return "";
+
+    // Pastikan URL menggunakan domain yang benar
+    const url = new URL(oriUrl);
+    url.hostname = "samehadaku.now";
+
+    return url.toString();
+  }
 }
