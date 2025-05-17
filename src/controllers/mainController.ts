@@ -68,6 +68,12 @@ const mainController = {
         throw new Error("URL is required");
       }
 
+      console.log("Proxy request:", {
+        url,
+        method: method || "GET",
+        data: data || {},
+      });
+
       const response = await axios({
         url,
         method: method || "GET",
@@ -82,11 +88,39 @@ const mainController = {
           Origin: url,
           Referer: url,
         },
+        validateStatus: (status) => status < 500, // Terima semua response kecuali 5xx
       });
 
-      res.json(response.data);
-    } catch (error) {
-      next(error);
+      console.log("Proxy response:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+
+      if (response.status >= 400) {
+        throw new Error(
+          `Proxy request failed with status ${response.status}: ${response.statusText}`
+        );
+      }
+
+      res.status(response.status).json(response.data);
+    } catch (error: any) {
+      console.error("Proxy error:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+
+      if (error.response) {
+        // Jika ada response dari server target
+        res.status(error.response.status).json(error.response.data);
+      } else {
+        // Jika error terjadi sebelum mendapat response
+        res.status(500).json({
+          error: "Proxy request failed",
+          message: error.message,
+        });
+      }
     }
   },
 

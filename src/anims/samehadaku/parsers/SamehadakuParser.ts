@@ -662,54 +662,25 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
     const type = serverIdArr[2];
 
     try {
-      // Coba request langsung dulu
-      let url;
-      try {
-        url = await wajikFetch(`${this.baseUrl}/wp-admin/admin-ajax.php`, this.baseUrl, {
+      // Coba request melalui proxy
+      const proxyUrl = `${originUrl}/api/proxy`;
+      const url = await wajikFetch(proxyUrl, originUrl, {
+        method: "POST",
+        responseType: "text",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        data: JSON.stringify({
+          url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
           method: "POST",
-          responseType: "text",
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Accept: "application/json, text/javascript, */*; q=0.01",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-            Origin: this.baseUrl,
-            Referer: this.baseUrl,
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-          },
           data: new URLSearchParams({
             action: "player_ajax",
             post: post || "",
             nume: nume || "",
             type: type || "",
-          }),
-        });
-      } catch (error) {
-        // Jika request langsung gagal, coba melalui proxy
-        console.log("Direct request failed, trying proxy...");
-        const proxyUrl = `${originUrl}/api/proxy`;
-        url = await wajikFetch(proxyUrl, originUrl, {
-          method: "POST",
-          responseType: "text",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          data: JSON.stringify({
-            url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
-            method: "POST",
-            data: {
-              action: "player_ajax",
-              post: post || "",
-              nume: nume || "",
-              type: type || "",
-            },
-          }),
-        });
-      }
+          }).toString(),
+        }),
+      });
 
       if (!url || !url.data) {
         throw new Error("No data received from server");
