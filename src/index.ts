@@ -7,6 +7,7 @@ import animeConfig from "@configs/animeConfig";
 import path from "path";
 import express from "express";
 import cors from "cors";
+import mainController from "@controllers/mainController";
 
 const { PORT } = animeConfig;
 const app = express();
@@ -22,6 +23,9 @@ app.use(samehadakuInfo.baseUrlPath, samehadakuRoute);
 
 // RUTE UTAMA
 app.use(mainRoute);
+app.use("/", mainController.getMainView);
+app.use("/api/main", mainController.getMainViewData);
+app.use("/api/proxy", mainController.proxy);
 
 // ERROR HANDLER
 app.use(errorHandler);
