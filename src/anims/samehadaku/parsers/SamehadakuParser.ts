@@ -439,6 +439,8 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
             "Sec-Fetch-User": "?1",
             "Upgrade-Insecure-Requests": "1",
           },
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
         },
       },
       async ($, data) => {
@@ -446,17 +448,42 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
           const getDefaultStreaming = async () => {
             try {
               const el = $($(".east_player_option")[0]);
+              if (!el.length) {
+                console.log("No player option found");
+                return "";
+              }
 
               const postData = el.attr("data-post");
               const numeData = el.attr("data-nume");
               const typeData = el.attr("data-type");
 
-              const result = await wajikFetch(
-                `${this.baseUrl}/wp-admin/admin-ajax.php`,
-                this.baseUrl,
-                {
+              if (!postData || !numeData || !typeData) {
+                console.log("Missing player data:", { postData, numeData, typeData });
+                return "";
+              }
+
+              console.log("Fetching streaming data:", {
+                post: postData,
+                nume: numeData,
+                type: typeData,
+              });
+
+              const proxyUrl = `${originUrl}/api/proxy`;
+              const result = await wajikFetch(proxyUrl, originUrl, {
+                method: "POST",
+                responseType: "text",
+                headers: {
+                  "Content-Type": "application/json",
+                  "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                  Accept: "application/json, text/javascript, */*; q=0.01",
+                  "Accept-Language": "en-US,en;q=0.9",
+                  Origin: originUrl,
+                  Referer: originUrl,
+                },
+                data: JSON.stringify({
+                  url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
                   method: "POST",
-                  responseType: "text",
                   headers: {
                     "User-Agent":
                       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -466,20 +493,25 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
                     "X-Requested-With": "XMLHttpRequest",
                     Origin: this.baseUrl,
                     Referer: this.baseUrl,
-                    "Sec-Fetch-Dest": "empty",
-                    "Sec-Fetch-Mode": "cors",
-                    "Sec-Fetch-Site": "same-origin",
                   },
                   data: new URLSearchParams({
                     action: "player_ajax",
-                    post: this.str(postData),
-                    nume: this.str(numeData),
-                    type: this.str(typeData),
-                  }),
-                }
-              );
+                    post: postData,
+                    nume: numeData,
+                    type: typeData,
+                  }).toString(),
+                }),
+                timeout: 10000,
+              });
 
-              return this.generateSrcFromIframeTag(result);
+              if (!result || !result.data) {
+                console.log("No streaming data received");
+                return "";
+              }
+
+              const streamingUrl = this.generateSrcFromIframeTag(result.data);
+              console.log("Generated streaming URL:", streamingUrl);
+              return streamingUrl;
             } catch (error) {
               console.error("Error getting default streaming:", error);
               return "";
@@ -496,9 +528,15 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
           data.defaultStreamingUrl = await getDefaultStreaming();
           data.downloadUrl = this.parseDownloadUrl($);
 
+          console.log("Default streaming URL:", data.defaultStreamingUrl);
+
           if (data.defaultStreamingUrl.includes("api.wibufile.com")) {
             data.defaultStreamingUrl =
-              originUrl + this.generateHref("/", `wibufile?url=${data.defaultStreamingUrl}`);
+              originUrl +
+              path
+                .join("/", this.baseUrlPath, `wibufile?url=${data.defaultStreamingUrl}`)
+                .replace(/\\/g, "/");
+            console.log("Modified wibufile URL:", data.defaultStreamingUrl);
           }
 
           const serverElements = $(".server_option ul li .east_player_option").toArray();
@@ -651,7 +689,7 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
           return data;
         } catch (error) {
           console.error("Error parsing anime episode:", error);
-          return data;
+          throw error;
         }
       }
     );

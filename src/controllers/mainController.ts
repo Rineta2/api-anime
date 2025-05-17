@@ -75,6 +75,13 @@ const mainController = {
         data: data ? "Data present" : "No data",
       });
 
+      // Validasi URL
+      try {
+        new URL(url);
+      } catch (error) {
+        throw new Error("Invalid URL format");
+      }
+
       const response = await axios({
         url,
         method,
@@ -92,12 +99,15 @@ const mainController = {
         },
         timeout: 10000,
         validateStatus: (status) => status < 500, // Terima semua response kecuali 5xx
+        maxRedirects: 5,
+        maxContentLength: 50 * 1024 * 1024, // 50MB
       });
 
       console.log("Proxy response:", {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
+        contentType: response.headers["content-type"],
       });
 
       // Kirim response sesuai dengan content type
@@ -111,6 +121,8 @@ const mainController = {
         message: error.message,
         code: error.code,
         response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers,
       });
 
       // Jika error dari target server
