@@ -661,37 +661,55 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
     const nume = serverIdArr[1];
     const type = serverIdArr[2];
 
-    const url = await wajikFetch(
-      `${this.baseUrl}/wp-admin/admin-ajax.php`,
-      this.baseUrl,
-      {
+    try {
+      const url = await wajikFetch(`${this.baseUrl}/wp-admin/admin-ajax.php`, this.baseUrl, {
         method: "POST",
         responseType: "text",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "application/json, text/javascript, */*; q=0.01",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+          Origin: this.baseUrl,
+          Referer: this.baseUrl,
+          "Sec-Fetch-Dest": "empty",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "same-origin",
+        },
         data: new URLSearchParams({
           action: "player_ajax",
           post: post || "",
           nume: nume || "",
           type: type || "",
         }),
-      },
-      (response) => {
-        if (!response.data) setResponseError(400);
+      });
+
+      if (!url || !url.data) {
+        throw new Error("No data received from server");
       }
-    );
 
-    data.url = this.generateSrcFromIframeTag(url);
+      data.url = this.generateSrcFromIframeTag(url.data);
 
-    if (data.url.includes("api.wibufile.com")) {
-      data.url =
-        originUrl +
-        path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
+      if (data.url.includes("api.wibufile.com")) {
+        data.url =
+          originUrl +
+          path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
+      }
+
+      const isEmpty = !data.url || data.url === "No iframe found";
+
+      if (isEmpty) {
+        throw new Error("No valid streaming URL found");
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error("Error getting server URL:", error);
+      setResponseError(400);
+      throw error;
     }
-
-    const isEmpty = !data.url || data.url === "No iframe found";
-
-    this.checkEmptyData(isEmpty);
-
-    return data;
   }
 
   parseWibuFile(url: string): Promise<any> {
