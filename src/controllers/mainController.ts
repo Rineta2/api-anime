@@ -62,7 +62,7 @@ const mainController = {
 
   async proxy(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { url, method, data } = req.body;
+      const { url, method = "GET", data, headers = {} } = req.body;
 
       if (!url) {
         throw new Error("URL is required");
@@ -70,14 +70,15 @@ const mainController = {
 
       console.log("Proxy request:", {
         url,
-        method: method || "GET",
-        data: data || {},
+        method,
+        headers,
+        data: data ? "Data present" : "No data",
       });
 
       const response = await axios({
         url,
-        method: method || "GET",
-        data: data || {},
+        method,
+        data,
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -85,9 +86,11 @@ const mainController = {
           "Accept-Language": "en-US,en;q=0.9",
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           "X-Requested-With": "XMLHttpRequest",
-          Origin: url,
+          Origin: new URL(url).origin,
           Referer: url,
+          ...headers,
         },
+        timeout: 10000,
         validateStatus: (status) => status < 500, // Terima semua response kecuali 5xx
       });
 
@@ -97,27 +100,32 @@ const mainController = {
         headers: response.headers,
       });
 
-      if (response.status >= 400) {
-        throw new Error(
-          `Proxy request failed with status ${response.status}: ${response.statusText}`
-        );
+      // Kirim response sesuai dengan content type
+      if (response.headers["content-type"]?.includes("application/json")) {
+        res.json(response.data);
+      } else {
+        res.send(response.data);
       }
-
-      res.status(response.status).json(response.data);
     } catch (error: any) {
       console.error("Proxy error:", {
         message: error.message,
+        code: error.code,
         response: error.response?.data,
-        status: error.response?.status,
       });
 
+      // Jika error dari target server
       if (error.response) {
-        // Jika ada response dari server target
-        res.status(error.response.status).json(error.response.data);
+        res.status(error.response.status).json({
+          statusCode: error.response.status,
+          statusMessage: error.response.statusText,
+          message: error.message,
+          data: error.response.data,
+        });
       } else {
-        // Jika error terjadi sebelum mendapat response
+        // Jika error sebelum mendapat response
         res.status(500).json({
-          error: "Proxy request failed",
+          statusCode: 500,
+          statusMessage: "Internal Server Error",
           message: error.message,
         });
       }

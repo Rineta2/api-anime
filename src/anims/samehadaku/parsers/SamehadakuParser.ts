@@ -665,45 +665,85 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
     const type = serverIdArr[2];
 
     try {
-      // Coba request melalui proxy
-      const proxyUrl = `${originUrl}/api/proxy`;
-      const url = await wajikFetch(proxyUrl, originUrl, {
-        method: "POST",
-        responseType: "text",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        data: JSON.stringify({
-          url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
-          method: "POST",
-          data: new URLSearchParams({
-            action: "player_ajax",
-            post: post || "",
-            nume: nume || "",
-            type: type || "",
-          }).toString(),
-        }),
-      });
+      // Coba request melalui proxy dengan retry mechanism
+      const maxRetries = 3;
+      let retryCount = 0;
+      let lastError;
 
-      if (!url || !url.data) {
-        throw new Error("No data received from server");
+      while (retryCount < maxRetries) {
+        try {
+          const proxyUrl = `${originUrl}/api/proxy`;
+          console.log(`Attempt ${retryCount + 1} to fetch from proxy:`, proxyUrl);
+
+          const url = await wajikFetch(proxyUrl, originUrl, {
+            method: "POST",
+            responseType: "text",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              Accept: "application/json, text/javascript, */*; q=0.01",
+              "Accept-Language": "en-US,en;q=0.9",
+              Origin: originUrl,
+              Referer: originUrl,
+            },
+            data: JSON.stringify({
+              url: `${this.baseUrl}/wp-admin/admin-ajax.php`,
+              method: "POST",
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                Accept: "application/json, text/javascript, */*; q=0.01",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                Origin: this.baseUrl,
+                Referer: this.baseUrl,
+              },
+              data: new URLSearchParams({
+                action: "player_ajax",
+                post: post || "",
+                nume: nume || "",
+                type: type || "",
+              }).toString(),
+            }),
+            timeout: 10000, // 10 detik timeout
+          });
+
+          if (!url || !url.data) {
+            throw new Error("No data received from server");
+          }
+
+          data.url = this.generateSrcFromIframeTag(url.data);
+
+          if (data.url.includes("api.wibufile.com")) {
+            data.url =
+              originUrl +
+              path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
+          }
+
+          const isEmpty = !data.url || data.url === "No iframe found";
+
+          if (isEmpty) {
+            throw new Error("No valid streaming URL found");
+          }
+
+          return data;
+        } catch (error: any) {
+          lastError = error;
+          console.error(`Attempt ${retryCount + 1} failed:`, error.message);
+          retryCount++;
+
+          if (retryCount < maxRetries) {
+            // Tunggu sebentar sebelum retry
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
       }
 
-      data.url = this.generateSrcFromIframeTag(url.data);
-
-      if (data.url.includes("api.wibufile.com")) {
-        data.url =
-          originUrl +
-          path.join("/", this.baseUrlPath, `wibufile?url=${data.url}`).replace(/\\/g, "/");
-      }
-
-      const isEmpty = !data.url || data.url === "No iframe found";
-
-      if (isEmpty) {
-        throw new Error("No valid streaming URL found");
-      }
-
-      return data;
+      // Jika semua retry gagal
+      console.error("All retry attempts failed:", lastError);
+      throw lastError;
     } catch (error: any) {
       console.error("Error getting server URL:", error);
       setResponseError(400);
