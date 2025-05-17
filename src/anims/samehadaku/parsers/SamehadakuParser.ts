@@ -487,7 +487,10 @@ export default class SamehadakuParser extends SamehadakuParserExtra {
           };
 
           data.title = $("h1.entry-title").text();
-          data.animeId = this.generateSlug($(".naveps .nvs.nvsc a").attr("href"));
+          const breadcrumbLinks = $("#breadcrumbs li a").toArray();
+          const animeLink = breadcrumbLinks.find((link) => $(link).text().includes("Season"));
+          data.animeId = animeLink ? this.generateSlug($(animeLink).attr("href")) : "";
+
           data.poster = this.str($(".thumb img").attr("src"));
           data.releasedOn = $(".time-post").text().trim();
           data.defaultStreamingUrl = await getDefaultStreaming();
